@@ -15,7 +15,7 @@ MAIN_NET = "https://api.mainnet-beta.solana.com/"
 CLUSTER_NAME_RPC_ENDPOINT_MAP = {"main_net": MAIN_NET, "test_net": TEST_NET, "dev_net": DEV_NET}
 
 
-def mint_metaplex_nft(custodian_public_key, custodian_private_key, link_to_json_file, solana_cluster="dev_net", token_name=None, token_symbol=None, debug=True):
+def mint_metaplex_nft(custodian_public_key, custodian_private_key, link_to_json_file, solana_cluster="dev_net", token_name=None, token_symbol=None, supply=1, debug=True):
     # Docstring
     """#################### mint_metaplex_nft() ####################
     Function to mint a Metaplex compliant NFT to a specified wallet on Solana
@@ -26,6 +26,7 @@ def mint_metaplex_nft(custodian_public_key, custodian_private_key, link_to_json_
         - solana_cluster (str): String representing cluster name, options are: 'main_net', 'test_net', and 'dev_net'
         - token_name (str)(Optional): String representing the name of the token on the Token Metadata Program
         - token_symbol (str)(Optional): String representing the symbol of the token on the Token Metadata Program
+        - supply (int)(Optional): Default=1, max supply for a certain NFT
         - debug (bool)(Optional): Default=True, If True, adds some extra logging
 
     Returns:
@@ -97,7 +98,7 @@ def mint_metaplex_nft(custodian_public_key, custodian_private_key, link_to_json_
     ###
     time.sleep(30)
 
-    result = api.mint(rpc_endpoint, contract_key, custodian_public_key, link_to_json_file)
+    result = api.mint(rpc_endpoint, contract_key, custodian_public_key, link_to_json_file, supply=supply)
     if debug:
         print(f"***[DEBUG]: api.mint.result:: {result}")
 
@@ -105,12 +106,64 @@ def mint_metaplex_nft(custodian_public_key, custodian_private_key, link_to_json_
     return json.loads(result).get('result')
 
 
+def transfer(asset_key, sender_key, sender_private_key, dest_key, solana_cluster="dev_net", debug=True):
+    """#################### transfer() ####################
+
+    Parameters:
+        - contract_key (str): Asset (contract/token) key to send
+        - sender_key (str): Sender public key
+        - sender_private_key ([64]): A byte array of len(64) of the sender's private Solana key
+        - solana_cluster (str)(Optional): Default='dev_net' String representing cluster name, options are: 'main_net', 'test_net', and 'dev_net'
+        - debug (bool)(Optional): Default=True, If True, adds some extra logging
+
+    Returns:
+        Transaction Hash String
+    """
+
+    # TODO: Determine if the custodian's private key will be passed to this function encrypted or not
+    # If encrypted, we need to pull the decryption_key from the environment somehow. For now, I'm just
+    # assuming the key is unencrypted as I'm not sure how Elixir Ports work
+    server_decryption_key = Fernet.generate_key().decode("ascii")
+
+    # Input validity checks
+    if solana_cluster not in CLUSTER_NAME_RPC_ENDPOINT_MAP:
+        raise ValueError('Invalid Solana Cluster Name')
+
+    if asset_key is None:
+        raise ValueError('asset_key cannot be None')
+
+    if sender_key is None:
+        raise ValueError('custodian_public_key cannot be None')
+
+    if sender_private_key is None:
+        raise ValueError('sender_private_key cannot be None')
+
+    if len(sender_private_key) != 64:
+        raise ValueError('sender_private_key should be a byte array with len(64)')
+
+    if dest_key is None:
+        raise ValueError('dest_key cannot be None')
+
+    private_key = bytes(sender_private_key)
+    cfg = {
+        "PRIVATE_KEY": base58.b58encode(private_key).decode("ascii"),
+        "PUBLIC_KEY": sender_key,
+        "DECRYPTION_KEY": server_decryption_key
+    }
+    api = MetaplexAPI(cfg)
+
+    rpc_endpoint = CLUSTER_NAME_RPC_ENDPOINT_MAP[solana_cluster]
+
+    result = api.send(rpc_endpoint, asset_key, sender_key, dest_key, sender_private_key)
+    if debug:
+        print(f"***[DEBUG]: api.send.result:: {result}")
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Aleo -> Solana Bridge CLI')
 
-    parser.add_argument('--mint_metaplex_nft', nargs="+", help='Calls function to mint a Metaplex compliant NFT into a specified wallet on Solana.')
-
-    parser.add_argument('-send', action='store_true', help='TODO: Not yet implemented, but will be a function to transfer an NFT from one account to another.')
+    parser.add_argument('--mint_metaplex_nft', nargs="+", help='Mints a Metaplex compliant NFT into a specified wallet on Solana.')
+    parser.add_argument('--transfer', nargs="+", help='Transfers a token from one address to another on Solana.')
     parser.add_argument('--docs', action='store_true', help='Returns the docstring of all functions')
 
     args = parser.parse_args()
@@ -124,25 +177,42 @@ if __name__ == '__main__':
 
         cluster = "dev_net"
         if len(args.mint_metaplex_nft) > 3:
-            cluster = args.cluster
+            cluster = args.mint_metaplex_nft[3]
+
+        supply = 1
+        if len(args.mint_metaplex_nft) > 4:
+            suplly = args.mint_metaplex_nft[4]
 
         token_name = None
-        if len(args.mint_metaplex_nft) > 4:
-            token_name = args.token_name
+        if len(args.mint_metaplex_nft) > 5:
+            token_name = args.mint_metaplex_nft[5]
 
         token_symbol = None
-        if len(args.mint_metaplex_nft) > 5:
-            token_symbol = args.token_symbol
+        if len(args.mint_metaplex_nft) > 6:
+            token_symbol = args.mint_metaplex_nft[6]
 
         debug = True
-        if len(args.mint_metaplex_nft) > 6:
-            debug = args.debug
+        if len(args.mint_metaplex_nft) > 7:
+            debug = args.mint_metaplex_nft[7]
 
-        mint_metaplex_nft(public_key, private_key, link, cluster, token_name, token_symbol, debug)
+        mint_metaplex_nft(public_key, private_key, link, cluster, supply, token_name, token_symbol, debug)
 
 
-    if args.send:
-        print('STUB: This function has not been built yet')
+    if args.transfer:
+        asset_key = args.transfer[0]
+        sender_key = args.transfer[1]
+        sender_private_key = json.loads(args.transfer[2])
+        dest_key = args.transfer[3]
+        cluster = "dev_net"
+        if len(args.transfer) > 4:
+            cluster = args.transfer[4]
+        debug = True
+        if len(args.transfer) > 5:
+            debug = args.transfer[5]
+
+        transfer(asset_key, sender_key, sender_private_key, dest_key, cluster, debug)
+
 
     if args.docs:
         print(mint_metaplex_nft.__doc__)
+        print(transfer.__doc__)

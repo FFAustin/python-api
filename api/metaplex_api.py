@@ -109,14 +109,16 @@ class MetaplexAPI():
             return json.dumps(resp)
 
 
-    def send(self, api_endpoint, contract_key, sender_key, dest_key, encrypted_private_key, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True):
+    def send(self, api_endpoint, contract_key, sender_key, dest_key, encrypted_private_key=None, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True):
         """
         Transfer a token on a given network and contract from the sender to the recipient.
         May require a private key, if so this will be provided encrypted using Fernet: https://cryptography.io/en/latest/fernet/
         Return a status flag of success or fail and the native transaction data. 
         """
+        print("send()")
         try:
-            private_key = list(self.cipher.decrypt(encrypted_private_key))
+            # If encrypting: private_key = list(self.cipher.decrypt(encrypted_private_key))
+            private_key = self.private_key
             tx, signers = send(api_endpoint, self.keypair, contract_key, sender_key, dest_key, private_key)
             resp = execute(
                 api_endpoint,
