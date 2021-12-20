@@ -54,9 +54,8 @@ def mint_metaplex_nft(custodian_public_key, custodian_private_key, link_to_json_
         raise ValueError('link_to_json_file cannot be None')
 
     # Init the MetaplexAPI
-    private_key = bytes(custodian_private_key)
     cfg = {
-        "PRIVATE_KEY": base58.b58encode(private_key).decode("ascii"),
+        "PRIVATE_KEY": custodian_private_key,
         "PUBLIC_KEY": custodian_public_key,
         "DECRYPTION_KEY": server_decryption_key
     }
