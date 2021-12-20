@@ -70,7 +70,9 @@ def mint_metaplex_nft(custodian_public_key, custodian_private_key, link_to_json_
     # Generate a random name and symbol if one was not provided
     letters = string.ascii_uppercase
     if token_name is None:
+        print("generating name")
         token_name = ''.join([random.choice(letters) for i in range(32)])
+        print(f"token_name:: {token_name}")
 
     if token_symbol is None:
        token_symbol = ''.join([random.choice(letters) for i in range(10)])
@@ -167,9 +169,10 @@ if __name__ == '__main__':
         private_key = args.mint_metaplex_nft[1]
         # Filesystem wallets are stored as arrays. Need to base58 encode them.
         if private_key[0] == "[":
-            private_key = json.loads(args.mint_metaplex_nft[1])
+            private_key = json.loads(private_key)
             pk_bytes = bytes(private_key)
             private_key = base58.b58encode(pk_bytes).decode("ascii")
+
         link = args.mint_metaplex_nft[2]
 
         cluster = "dev_net"
@@ -192,7 +195,7 @@ if __name__ == '__main__':
         if len(args.mint_metaplex_nft) > 7:
             debug = args.mint_metaplex_nft[7]
 
-        mint_metaplex_nft(public_key, private_key, link, cluster, supply, token_name, token_symbol, debug)
+        mint_metaplex_nft(public_key, private_key, link, cluster, token_name, token_symbol, supply, debug)
 
 
     if args.transfer:
