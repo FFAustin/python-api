@@ -10,16 +10,24 @@ log = logging.getLogger(__name__)
 def execute(api_endpoint, tx, signers, max_retries=3, skip_confirmation=True, max_timeout=60, target=20,
             finalized=True):
     client = Client(api_endpoint)
-    signers = list(map(Keypair, set(map(lambda s: s.seed, signers))))
+    # signers = list(map(Keypair, set(map(lambda s: s.seed, signers))))
+
+    resulting_signers = []
+    for signer in signers:
+        if signer in resulting_signers:
+            continue
+        resulting_signers.append(signer)
+        log.info(f"Adding signer: {signer.seed}")
 
     last_error = TimeoutError()
     for attempt in range(max_retries):
         try:
-            result = client.send_transaction(tx, *signers, opts=TxOpts(skip_preflight=True))
+            result = client.send_transaction(tx, *resulting_signers, opts=TxOpts(skip_preflight=False))
             log.info(f"Result of execution: {result}")
             signatures = [x.signature for x in tx.signatures]
             if not skip_confirmation:
                 await_confirmation(client, signatures, max_timeout, target, finalized)
+
             return result
         except Exception as e:
             log.info(f"Failed attempt {attempt}: {e}")
