@@ -168,7 +168,12 @@ if __name__ == '__main__':
         # Note: I tried to do this with named arguments (e.g. '--custodian_public_key "<key>"') instead of
         # an argument array, but it wasn't working with Elixir's System.cmd()
         public_key = args.mint_metaplex_nft[0]
-        private_key = json.loads(args.mint_metaplex_nft[1])
+        private_key = args.mint_metaplex_nft[1]
+        # Filesystem wallets are stored as arrays. Need to base58 encode them.
+        if private_key[0] == "[":
+            private_key = json.loads(args.mint_metaplex_nft[1])
+            pk_bytes = bytes(private_key)
+            private_key = base58.b58encode(pk_bytes).decode("ascii")
         link = args.mint_metaplex_nft[2]
 
         cluster = "dev_net"
