@@ -112,7 +112,7 @@ def transfer(asset_key, sender_key, sender_private_key, dest_key, solana_cluster
     Parameters:
         - contract_key (str): Asset (contract/token) key to send
         - sender_key (str): Sender public key
-        - sender_private_key ([64]): A byte array of len(64) of the sender's private Solana key
+        - sender_private_key ([64]/str): A string OR a byte array of len(64) is using a filesystem wallet of the sender's private Solana key
         - solana_cluster (str)(Optional): Default='dev_net' String representing cluster name, options are: 'main_net', 'test_net', and 'dev_net'
         - debug (bool)(Optional): Default=True, If True, adds some extra logging
 
@@ -138,15 +138,11 @@ def transfer(asset_key, sender_key, sender_private_key, dest_key, solana_cluster
     if sender_private_key is None:
         raise ValueError('sender_private_key cannot be None')
 
-    if len(sender_private_key) != 64:
-        raise ValueError('sender_private_key should be a byte array with len(64)')
-
     if dest_key is None:
         raise ValueError('dest_key cannot be None')
 
-    private_key = bytes(sender_private_key)
     cfg = {
-        "PRIVATE_KEY": base58.b58encode(private_key).decode("ascii"),
+        "PRIVATE_KEY": sender_private_key,
         "PUBLIC_KEY": sender_key,
         "DECRYPTION_KEY": server_decryption_key
     }
@@ -201,7 +197,13 @@ if __name__ == '__main__':
     if args.transfer:
         asset_key = args.transfer[0]
         sender_key = args.transfer[1]
-        sender_private_key = json.loads(args.transfer[2])
+        sender_private_key = args.transfer[2]
+        # Filesystem wallets are stored as arrays. Need to base58 encode them.
+        if sender_private_key[0] == "[":
+            sender_private_key = json.loads(args.transfer[2])
+            pk_bytes = bytes(sender_private_key)
+            sender_private_key = base58.b58encode(pk_bytes).decode("ascii")
+
         dest_key = args.transfer[3]
         cluster = "dev_net"
         if len(args.transfer) > 4:
