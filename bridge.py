@@ -1,12 +1,26 @@
-from api.metaplex_api import MetaplexAPI
-from cryptography.fernet import Fernet
+import argparse
 import json
-import base58
-import time
+import logging.config
 import random
 import string
-import argparse
+import time
+from json import JSONDecodeError
+from typing import Optional
 
+import base58
+from cryptography.fernet import Fernet
+
+from api.metaplex_api import MetaplexAPI
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(funcName)s %(lineno)s %(message)s",
+    handlers=[
+        logging.StreamHandler()
+    ]
+
+)
+log = logging.getLogger(__name__)
 
 # Constants
 DEV_NET = "https://api.devnet.solana.com/"
@@ -15,7 +29,13 @@ MAIN_NET = "https://api.mainnet-beta.solana.com/"
 CLUSTER_NAME_RPC_ENDPOINT_MAP = {"main_net": MAIN_NET, "test_net": TEST_NET, "dev_net": DEV_NET}
 
 
-def mint_metaplex_nft(custodian_public_key, custodian_private_key, link_to_json_file, solana_cluster="dev_net", token_name=None, token_symbol=None, supply=1, debug=True):
+def mint_metaplex_nft(custodian_public_key: str,
+                      custodian_private_key: str,
+                      link_to_json_file: str,
+                      solana_cluster: Optional[str] = "dev_net",
+                      token_name: Optional[str] = None,
+                      token_symbol: Optional[str] = None,
+                      supply: Optional[int] = 1):
     # Docstring
     """#################### mint_metaplex_nft() ####################
     Function to mint a Metaplex compliant NFT to a specified wallet on Solana
@@ -27,7 +47,6 @@ def mint_metaplex_nft(custodian_public_key, custodian_private_key, link_to_json_
         - token_name (str)(Optional): String representing the name of the token on the Token Metadata Program
         - token_symbol (str)(Optional): String representing the symbol of the token on the Token Metadata Program
         - supply (int)(Optional): Default=1, max supply for a certain NFT
-        - debug (bool)(Optional): Default=True, If True, adds some extra logging
 
     Returns:
         Transaction Hash (str)
@@ -39,18 +58,17 @@ def mint_metaplex_nft(custodian_public_key, custodian_private_key, link_to_json_
     # assuming the key is unencrypted as I'm not sure how Elixir Ports work
     server_decryption_key = Fernet.generate_key().decode("ascii")
 
-
     # Input validity checks
-    if solana_cluster not in CLUSTER_NAME_RPC_ENDPOINT_MAP:
-        raise ValueError('Invalid Solana Cluster Name')
+    if not CLUSTER_NAME_RPC_ENDPOINT_MAP.get(solana_cluster):
+        raise ValueError("Invalid Solana Cluster")
 
-    if custodian_public_key is None:
+    if not custodian_public_key:
         raise ValueError('custodian_public_key cannot be None')
 
-    if custodian_private_key is None:
+    if not custodian_private_key:
         raise ValueError('custodian_private_key cannot be None')
 
-    if link_to_json_file is None:
+    if not link_to_json_file:
         raise ValueError('link_to_json_file cannot be None')
 
     # Init the MetaplexAPI
@@ -68,22 +86,16 @@ def mint_metaplex_nft(custodian_public_key, custodian_private_key, link_to_json_
     fees = 0
 
     # Generate a random name and symbol if one was not provided
-    letters = string.ascii_uppercase
-    if token_name is None:
-        print("generating name")
-        token_name = ''.join([random.choice(letters) for i in range(32)])
-        print(f"token_name:: {token_name}")
+    token_name = token_name or ''.join([random.choice(string.ascii_uppercase) for _ in range(32)])
 
-    if token_symbol is None:
-       token_symbol = ''.join([random.choice(letters) for i in range(10)])
+    # Generate a random symbol if one was not provided
+    token_symbol = token_symbol or ''.join([random.choice(string.ascii_uppercase) for i in range(10)])
 
     result = api.deploy(rpc_endpoint, token_name, token_symbol, fees, max_timeout=180)
-    if debug:
-        print(f"***[DEBUG]: api.deploy.result:: {result}")
+    log.debug(f"api.deploy.result:: {result}")
 
     contract_key = json.loads(result).get('contract')
-    if debug:
-        print(f"***[DEBUG]: contract_key:: {contract_key}")
+    log.debug(f"contract_key:: {contract_key}")
 
     ###
     # !!!WARNING, HERE BE DRAGONS!!!
@@ -94,11 +106,10 @@ def mint_metaplex_nft(custodian_public_key, custodian_private_key, link_to_json_
     # with the network, which is why the sleep "fixes" it. Leaving it here for now but will dig
     # deeper to get rid of it.
     ###
-    time.sleep(30)
+    # time.sleep(30)
 
     result = api.mint(rpc_endpoint, contract_key, custodian_public_key, link_to_json_file, supply=supply)
-    if debug:
-        print(f"***[DEBUG]: api.mint.result:: {result}")
+    log.debug(f"api.mint.result:: {result}")
 
     # Return the mint transaction hash
     return json.loads(result).get('result')
@@ -124,8 +135,8 @@ def transfer(asset_key, sender_key, sender_private_key, dest_key, solana_cluster
     server_decryption_key = Fernet.generate_key().decode("ascii")
 
     # Input validity checks
-    if solana_cluster not in CLUSTER_NAME_RPC_ENDPOINT_MAP:
-        raise ValueError('Invalid Solana Cluster Name')
+    if not CLUSTER_NAME_RPC_ENDPOINT_MAP.get(solana_cluster):
+        raise ValueError("Invalid Solana Cluster")
 
     if asset_key is None:
         raise ValueError('asset_key cannot be None')
@@ -149,14 +160,14 @@ def transfer(asset_key, sender_key, sender_private_key, dest_key, solana_cluster
     rpc_endpoint = CLUSTER_NAME_RPC_ENDPOINT_MAP[solana_cluster]
 
     result = api.send(rpc_endpoint, asset_key, sender_key, dest_key, sender_private_key)
-    if debug:
-        print(f"***[DEBUG]: api.send.result:: {result}")
+    log.debug(f"api.send.result:: {result}")
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Aleo -> Solana Bridge CLI')
 
-    parser.add_argument('--mint_metaplex_nft', nargs="+", help='Mints a Metaplex compliant NFT into a specified wallet on Solana.')
+    parser.add_argument('--mint_metaplex_nft', nargs="+",
+                        help='Mints a Metaplex compliant NFT into a specified wallet on Solana.')
     parser.add_argument('--transfer', nargs="+", help='Transfers a token from one address to another on Solana.')
     parser.add_argument('--docs', action='store_true', help='Returns the docstring of all functions')
 
@@ -167,36 +178,40 @@ if __name__ == '__main__':
         # an argument array, but it wasn't working with Elixir's System.cmd()
         public_key = args.mint_metaplex_nft[0]
         private_key = args.mint_metaplex_nft[1]
-        # Filesystem wallets are stored as arrays. Need to base58 encode them.
-        if private_key[0] == "[":
+
+        if private_key[0] == "[" and private_key[-1] == "]":
             private_key = json.loads(private_key)
             pk_bytes = bytes(private_key)
             private_key = base58.b58encode(pk_bytes).decode("ascii")
 
         link = args.mint_metaplex_nft[2]
 
-        cluster = "dev_net"
-        if len(args.mint_metaplex_nft) > 3:
-            cluster = args.mint_metaplex_nft[3]
+        cluster = args.mint_metaplex_nft[3] if len(args.mint_metaplex_nft) > 3 else "dev_net"
 
-        supply = 1
-        if len(args.mint_metaplex_nft) > 4:
-            suplly = args.mint_metaplex_nft[4]
+        supply = args.mint_metaplex_nft[4] if len(args.mint_metaplex_nft) > 4 else 1
 
-        token_name = None
-        if len(args.mint_metaplex_nft) > 5:
-            token_name = args.mint_metaplex_nft[5]
+        token_name = args.mint_metaplex_nft[5] if len(args.mint_metaplex_nft) > 5 else None
 
-        token_symbol = None
-        if len(args.mint_metaplex_nft) > 6:
-            token_symbol = args.mint_metaplex_nft[6]
+        token_symbol = args.mint_metaplex_nft[6] if len(args.mint_metaplex_nft) > 6 else None
 
-        debug = True
-        if len(args.mint_metaplex_nft) > 7:
-            debug = args.mint_metaplex_nft[7]
+        debug = args.mint_metaplex_nft[7] if len(args.mint_metaplex_nft) > 7 else True
+        log.setLevel(logging.DEBUG if debug else logging.ERROR)
 
-        mint_metaplex_nft(public_key, private_key, link, cluster, token_name, token_symbol, supply, debug)
+        # Filesystem wallets are stored as arrays. Need to base58 encode them.
+        try:
+            private_key_byte_array = json.loads(private_key)
+            log.debug("Using base58 encoded private key")
+            if not isinstance(private_key_byte_array, list) or not all(
+                    isinstance(i, int) for i in private_key_byte_array) or len(private_key_byte_array) != 64:
+                raise ValueError('Filesystem wallet byte arrays must be a 64 byte json encoded byte array. \n For '
+                                 'example: "[23,148,26,223,164,159,38,100,170,73,240,76,219,148,237,141,200,13,70,'
+                                 '212,65,192,67,114,199,101,45,31,31,163,215,86,119,214,243,171,0,59,2,40,4,198,39,'
+                                 '235,233,121,185,235,110,217,127,156,171,154,173,20,208,123,91,88,125,187,96,214]"')
+            private_key = base58.b58encode(bytes(private_key_byte_array)).decode("ascii")
+        except JSONDecodeError:
+            log.debug("Using base58 encoded private key")
 
+        mint_metaplex_nft(public_key, private_key, link, cluster, token_name, token_symbol, supply)
 
     if args.transfer:
         asset_key = args.transfer[0]
@@ -209,15 +224,11 @@ if __name__ == '__main__':
             sender_private_key = base58.b58encode(pk_bytes).decode("ascii")
 
         dest_key = args.transfer[3]
-        cluster = "dev_net"
-        if len(args.transfer) > 4:
-            cluster = args.transfer[4]
-        debug = True
-        if len(args.transfer) > 5:
-            debug = args.transfer[5]
+        cluster = args.transfer[4] if len(args.transfer) > 4 else "dev_net"
+        debug = args.transfer[5] if len(args.transfer) > 5 else True
+        log.setLevel(logging.DEBUG if debug else logging.ERROR)
 
-        transfer(asset_key, sender_key, sender_private_key, dest_key, cluster, debug)
-
+        transfer(asset_key, sender_key, sender_private_key, dest_key, cluster)
 
     if args.docs:
         print(mint_metaplex_nft.__doc__)
