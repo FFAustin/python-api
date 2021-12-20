@@ -50,9 +50,6 @@ def mint_metaplex_nft(custodian_public_key, custodian_private_key, link_to_json_
     if custodian_private_key is None:
         raise ValueError('custodian_private_key cannot be None')
 
-    if len(custodian_private_key) != 64:
-        raise ValueError('custodian_private_key should be a byte array with len(64)')
-
     if link_to_json_file is None:
         raise ValueError('link_to_json_file cannot be None')
 
