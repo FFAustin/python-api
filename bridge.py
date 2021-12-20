@@ -188,7 +188,7 @@ if __name__ == '__main__':
 
         cluster = args.mint_metaplex_nft[3] if len(args.mint_metaplex_nft) > 3 else "dev_net"
 
-        supply = args.mint_metaplex_nft[4] if len(args.mint_metaplex_nft) > 4 else 1
+        supply = int(args.mint_metaplex_nft[4]) if len(args.mint_metaplex_nft) > 4 else 1
 
         token_name = args.mint_metaplex_nft[5] if len(args.mint_metaplex_nft) > 5 else None
 
