@@ -240,6 +240,10 @@ if __name__ == '__main__':
         # Aggregate Arguments
         args_len = len(args)
 
+        if args_len < 3:
+            print(json.dumps({"status": 422, "error": "public_key, private_key, and link cannot be None"}))
+            sys.exit(0)
+
         public_key = args[0]
         private_key = args[1]
 
@@ -283,6 +287,10 @@ if __name__ == '__main__':
         public_key = args[0]
         private_key = args[1]
 
+        if args_len < 2:
+            print(json.dumps({"status": 422, "error": "public_key, and private_key cannot be None"}))
+            sys.exit(0)
+
         token_name = args[2] if args_len > 2 else None
 
         token_symbol = args[3] if len(args) > 3 else None
@@ -312,6 +320,11 @@ if __name__ == '__main__':
 
         # Aggregate Arguments
         args_len = len(args)
+
+        if args_len < 4:
+            print(json.dumps({"status": 422,
+                              "error": "public_key, private_key, link, and contract_key cannot be None"}))
+            sys.exit(0)
 
         public_key = args[0]
         private_key = args[1]
@@ -345,6 +358,11 @@ if __name__ == '__main__':
 
     if args := parsed_args.transfer:
         args_len = len(args)
+
+        if args_len < 4:
+            print(json.dumps({"status": 422,
+                              "error": "asset_key, sender_key, sender_private_key, and dest_key cannot be None"}))
+            sys.exit(0)
 
         asset_key = args[0]
         sender_key = args[1]
