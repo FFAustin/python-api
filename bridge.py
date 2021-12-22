@@ -1,11 +1,12 @@
+import sys
 import argparse
 import json
 import logging.config
 import random
 import string
-import time
 from json import JSONDecodeError
 from typing import Optional
+from distutils.util import strtobool
 
 import base58
 from cryptography.fernet import Fernet
@@ -45,10 +46,10 @@ def _init_metaplex_api(custodian_public_key: str,
     return MetaplexAPI(cfg)
 
 
-def _cluster_rpc_endpoint(cluster: str) -> str:
+def _cluster_rpc_endpoint(cluster: str) -> Optional[str]:
     if rpc_endpoint := CLUSTER_NAME_RPC_ENDPOINT_MAP.get(cluster):
         return rpc_endpoint
-    raise ValueError("Invalid Solana Cluster")
+    return None
 
 
 def _get_or_b58encode_private_key(pk: str) -> str:
@@ -70,7 +71,7 @@ def _get_or_b58encode_private_key(pk: str) -> str:
 def deploy_and_mint_metaplex_nft(custodian_public_key: str,
                                  custodian_private_key: str,
                                  link_to_json_file: str,
-                                 solana_cluster: Optional[str] = "dev_net",
+                                 cluster: Optional[str] = "dev_net",
                                  token_name: Optional[str] = None,
                                  token_symbol: Optional[str] = None,
                                  supply: Optional[int] = 1) -> str:
@@ -95,16 +96,30 @@ def deploy_and_mint_metaplex_nft(custodian_public_key: str,
     api = _init_metaplex_api(custodian_public_key, custodian_private_key)
     rpc_endpoint = _cluster_rpc_endpoint(cluster)
 
+    if not rpc_endpoint:
+        return json.dumps({"status": 422, "error": "Invalid Solana Cluster"})
+
     # Deploy the NFT metadata program
     result = deploy(api, rpc_endpoint, token_name, token_symbol)
-    contract_key = json.loads(result).get('contract')
+    serialized_result = json.loads(result)
+    if serialized_result.get("status") >= 300:
+        log.debug(f"Error Result: {serialized_result}")
+        return result
+
+    contract_key = serialized_result.get('contract')
     log.debug(f"contract_key:: {contract_key}")
 
     # Mint the Master Edition NFT with the metadata program
-    result = mint(api, rpc_endpoint, custodian_public_key, link_to_json_file, contract_key, supply)
+    result = mint(api, rpc_endpoint, custodian_public_key, link_to_json_file, contract_key, supply=supply)
+    serialized_result = json.loads(result)
+    if serialized_result.get("status") >= 300:
+        log.debug(f"Error Result: {serialized_result}")
+        return result
+    log.debug(f"result: {result}")
 
+    mint_tx_hash = serialized_result.get('result')
     # Return the mint transaction hash
-    return json.loads(result).get('result')
+    return json.dumps({"status": 200, "result": {"contract_key": contract_key, "mint_tx_hash": mint_tx_hash}})
 
 
 def deploy_metaplex_nft(cluster: str,
@@ -114,6 +129,8 @@ def deploy_metaplex_nft(cluster: str,
                         token_symbol: Optional[str] = None) -> str:
     api = _init_metaplex_api(custodian_public_key, custodian_private_key)
     rpc_endpoint = _cluster_rpc_endpoint(cluster)
+    if not rpc_endpoint:
+        return json.dumps({"status": 422, "error": "Invalid Solana Cluster"})
     return deploy(api, rpc_endpoint, token_name, token_symbol)
 
 
@@ -129,7 +146,7 @@ def deploy(api: MetaplexAPI,
     token_name = token_name or ''.join([random.choice(string.ascii_uppercase) for _ in range(32)])
 
     # Generate a random symbol if one was not provided
-    token_symbol = token_symbol or ''.join([random.choice(string.ascii_uppercase) for i in range(10)])
+    token_symbol = token_symbol or ''.join([random.choice(string.ascii_uppercase) for _ in range(10)])
 
     result = api.deploy(rpc_endpoint, token_name, token_symbol, fees, max_timeout=180)
     log.debug(f"api.deploy.result:: {result}")
@@ -146,6 +163,8 @@ def mint_metaplex_nft(cluster: str,
                       supply: Optional[int] = 1) -> str:
     api = _init_metaplex_api(custodian_public_key, custodian_private_key)
     rpc_endpoint = _cluster_rpc_endpoint(cluster)
+    if not rpc_endpoint:
+        return json.dumps({"status": 422, "error": "Invalid Solana Cluster"})
     return mint(api, rpc_endpoint, custodian_public_key, link_to_json_file, contract_key, supply)
 
 
@@ -169,6 +188,8 @@ def transfer_metaplex_nft(cluster: str,
                           dest_key: str) -> str:
     api = _init_metaplex_api(sender_key, sender_private_key)
     rpc_endpoint = _cluster_rpc_endpoint(cluster)
+    if not rpc_endpoint:
+        return json.dumps({"status": 422, "error": "Invalid Solana Cluster"})
     return transfer(api, rpc_endpoint, asset_key, sender_key, sender_private_key, dest_key)
 
 
@@ -219,6 +240,10 @@ if __name__ == '__main__':
         # Aggregate Arguments
         args_len = len(args)
 
+        if args_len < 3:
+            print(json.dumps({"status": 422, "error": "public_key, private_key, and link cannot be None"}))
+            sys.exit(0)
+
         public_key = args[0]
         private_key = args[1]
 
@@ -231,24 +256,28 @@ if __name__ == '__main__':
 
         token_symbol = args[6] if len(args) > 6 else None
 
-        debug = args[7] if len(args) > 7 else True
+        debug = strtobool(args[7]) if len(args) > 7 else False
         # Set Log Level
         log.setLevel(logging.DEBUG if debug else logging.ERROR)
 
         # Validate Input Params
         if not public_key:
-            raise ValueError('public_key cannot be None')
+            print(json.dumps({"status": 422, "error": "public_key cannot be None"}))
+            sys.exit(0)
 
         if not private_key:
-            raise ValueError('private_key cannot be None')
+            print(json.dumps({"status": 422, "error": "private_key cannot be None"}))
+            sys.exit(0)
 
         if not link:
-            raise ValueError('link to the asset JSON cannot be None')
+            print(json.dumps({"status": 422, "error": "link to the asset JSON cannot be None"}))
+            sys.exit(0)
 
         # Filesystem wallets are stored as arrays. Need to base58 encode them.
         private_key = _get_or_b58encode_private_key(private_key)
 
-        deploy_and_mint_metaplex_nft(public_key, private_key, link, cluster, token_name, token_symbol, supply)
+        result = deploy_and_mint_metaplex_nft(public_key, private_key, link, cluster, token_name, token_symbol, supply)
+        print(result)
 
     if args := parsed_args.deploy_metaplex_nft:
 
@@ -258,25 +287,44 @@ if __name__ == '__main__':
         public_key = args[0]
         private_key = args[1]
 
+        if args_len < 2:
+            print(json.dumps({"status": 422, "error": "public_key, and private_key cannot be None"}))
+            sys.exit(0)
+
         token_name = args[2] if args_len > 2 else None
 
         token_symbol = args[3] if len(args) > 3 else None
 
         cluster = args[4] if args_len > 4 else "dev_net"
 
-        debug = args[5] if len(args) > 5 else True
+        debug = strtobool(args[5]) if len(args) > 5 else False
         # Set Log Level
         log.setLevel(logging.DEBUG if debug else logging.ERROR)
+
+        # Validate Input Params
+        if not public_key:
+            print(json.dumps({"status": 422, "error": "public_key cannot be None"}))
+            sys.exit(0)
+
+        if not private_key:
+            print(json.dumps({"status": 422, "error": "private_key cannot be None"}))
+            sys.exit(0)
 
         # Filesystem wallets are stored as arrays. Need to base58 encode them.
         private_key = _get_or_b58encode_private_key(private_key)
 
-        deploy_metaplex_nft(cluster, public_key, private_key, token_name, token_symbol)
+        result = deploy_metaplex_nft(cluster, public_key, private_key, token_name, token_symbol)
+        print(result)
 
     if args := parsed_args.only_mint_metaplex_nft:
 
         # Aggregate Arguments
         args_len = len(args)
+
+        if args_len < 4:
+            print(json.dumps({"status": 422,
+                              "error": "public_key, private_key, link, and contract_key cannot be None"}))
+            sys.exit(0)
 
         public_key = args[0]
         private_key = args[1]
@@ -285,31 +333,68 @@ if __name__ == '__main__':
         supply = int(args[4]) if args_len > 4 else 1
         cluster = args[5] if args_len > 5 else "dev_net"
 
-        debug = args[6] if len(args) > 6 else True
+        debug = strtobool(args[6]) if len(args) > 6 else False
         # Set Log Level
         log.setLevel(logging.DEBUG if debug else logging.ERROR)
+
+        # Validate Input Params
+        if not public_key:
+            print(json.dumps({"status": 422, "error": "public_key cannot be None"}))
+            sys.exit(0)
+
+        if not private_key:
+            print(json.dumps({"status": 422, "error": "private_key cannot be None"}))
+            sys.exit(0)
+
+        if not link:
+            print(json.dumps({"status": 422, "error": "link to the asset JSON cannot be None"}))
+            sys.exit(0)
 
         # Filesystem wallets are stored as arrays. Need to base58 encode them.
         private_key = _get_or_b58encode_private_key(private_key)
 
-        mint_metaplex_nft(cluster, public_key, private_key, link, contract_key, supply)
+        result = mint_metaplex_nft(cluster, public_key, private_key, link, contract_key, supply)
+        print(result)
 
     if args := parsed_args.transfer:
         args_len = len(args)
+
+        if args_len < 4:
+            print(json.dumps({"status": 422,
+                              "error": "asset_key, sender_key, sender_private_key, and dest_key cannot be None"}))
+            sys.exit(0)
 
         asset_key = args[0]
         sender_key = args[1]
         sender_private_key = args[2]
         dest_key = args[3]
         cluster = args[4] if args_len > 4 else "dev_net"
-        debug = args[5] if args_len > 5 else True
-
+        debug = strtobool(args[5]) if args_len > 5 else False
+        # Set Log Level
         log.setLevel(logging.DEBUG if debug else logging.ERROR)
+
+        # Validate Input Params
+        if not asset_key:
+            print(json.dumps({"status": 422, "error": "asset_key cannot be None"}))
+            sys.exit(0)
+
+        if not sender_key:
+            print(json.dumps({"status": 422, "error": "sender_key cannot be None"}))
+            sys.exit(0)
+
+        if not sender_private_key:
+            print(json.dumps({"status": 422, "error": "sender_private_key cannot be None"}))
+            sys.exit(0)
+
+        if not dest_key:
+            print(json.dumps({"status": 422, "error": "dest_key cannot be None"}))
+            sys.exit(0)
 
         # Filesystem wallets are stored as arrays. Need to base58 encode them.
         sender_private_key = _get_or_b58encode_private_key(sender_private_key)
 
-        transfer_metaplex_nft(cluster, asset_key, sender_key, sender_private_key, dest_key)
+        result = transfer_metaplex_nft(cluster, asset_key, sender_key, sender_private_key, dest_key)
+        print(result)
 
     if parsed_args.docs:
         print(mint_metaplex_nft.__doc__)

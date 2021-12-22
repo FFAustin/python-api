@@ -119,7 +119,7 @@ def create_metadata_instruction_data(name, symbol, fee, creators):
 
 def create_metadata_instruction(data, update_authority, mint_key, mint_authority_key, payer):
     metadata_account = get_metadata_account(mint_key)
-    log.info(f"metadata_account: {metadata_account}")
+    log.debug(f"metadata_account: {metadata_account}")
     keys = [
         AccountMeta(pubkey=metadata_account, is_signer=False, is_writable=True),
         AccountMeta(pubkey=mint_key, is_signer=False, is_writable=False),
@@ -192,9 +192,9 @@ def unpack_metadata_account(data):
 
 def get_metadata(client, mint_key):
     metadata_account = get_metadata_account(mint_key)
-    log.info(f"get_metadata_account: {metadata_account}")
+    log.debug(f"get_metadata_account: {metadata_account}")
     result_account_info = client.get_account_info(metadata_account)
-    log.info(f"result_account_info: {result_account_info}")
+    log.debug(f"result_account_info: {result_account_info}")
     data = base64.b64decode(result_account_info['result']['value']['data'][0])
     metadata = unpack_metadata_account(data)
     return metadata
