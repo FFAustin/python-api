@@ -17,20 +17,20 @@ def execute(api_endpoint, tx, signers, max_retries=3, skip_confirmation=True, ma
         if signer in resulting_signers:
             continue
         resulting_signers.append(signer)
-        log.info(f"Adding signer: {signer.seed}")
+        log.debug(f"Adding signer: {signer.seed}")
 
     last_error = TimeoutError()
     for attempt in range(max_retries):
         try:
             result = client.send_transaction(tx, *resulting_signers, opts=TxOpts(skip_preflight=False))
-            log.info(f"Result of execution: {result}")
+            log.debug(f"Result of execution: {result}")
             signatures = [x.signature for x in tx.signatures]
             if not skip_confirmation:
                 await_confirmation(client, signatures, max_timeout, target, finalized)
 
             return result
         except Exception as e:
-            log.info(f"Failed attempt {attempt}: {e}")
+            log.debug(f"Failed attempt {attempt}: {e}")
             last_error = e
             continue
     log.error(f"Failed to execute with final error: {last_error}")
@@ -51,8 +51,8 @@ def await_confirmation(client, signatures, max_timeout=60, target=20, finalized=
             continue
         if not finalized:
             if confirmations >= target or is_finalized:
-                log.info(f"Took {elapsed} seconds to confirm transaction")
+                log.debug(f"Took {elapsed} seconds to confirm transaction")
                 return
         elif is_finalized:
-            log.info(f"Took {elapsed} seconds to confirm transaction")
+            log.debug(f"Took {elapsed} seconds to confirm transaction")
             return

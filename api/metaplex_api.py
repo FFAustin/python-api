@@ -31,6 +31,9 @@ class MetaplexAPI:
         self.keypair = Keypair(PrivateKey(bytes(self.private_key)))
         self.cipher = Fernet(cfg["DECRYPTION_KEY"])
 
+    def raw_deploy(self, api_endpoint, name, symbol, fees) -> (str, list[Keypair], str):
+        return deploy(api_endpoint, self.keypair, name, symbol, fees)
+
     def deploy(self, api_endpoint, name, symbol, fees, max_retries=3, skip_confirmation=False, max_timeout=60,
                target=20, finalized=True):
         """
@@ -39,7 +42,7 @@ class MetaplexAPI:
         """
         try:
             tx, signers, contract = deploy(api_endpoint, self.keypair, name, symbol, fees)
-            log.info(f"Created Contract Address: {contract}")
+            log.debug(f"Created Contract Address: {contract}")
             resp = execute(
                 api_endpoint,
                 tx,
@@ -78,47 +81,55 @@ class MetaplexAPI:
         except Exception as e:
             return json.dumps({"status": 400, "error": f"{e}"})
 
+    def raw_mint(self, api_endpoint, contract_key, dest_key, link, supply=1, create_master_edition=True) -> (str, list[Keypair]):
+        return mint(api_endpoint, self.keypair, contract_key, dest_key, link, supply=supply, create_master_edition=create_master_edition)
+
     def mint(self, api_endpoint, contract_key, dest_key, link, max_retries=3, skip_confirmation=False, max_timeout=60,
-             target=20, finalized=True, supply=1):
+             target=20, finalized=True, supply=1, create_master_edition=True):
         """
         Mints an NFT to an account, updates the metadata and creates a master edition
         """
-        tx, signers = mint(api_endpoint, self.keypair, contract_key, dest_key, link, supply=supply)
-        resp = execute(
-            api_endpoint,
-            tx,
-            signers,
-            max_retries=max_retries,
-            skip_confirmation=skip_confirmation,
-            max_timeout=max_timeout,
-            target=target,
-            finalized=finalized,
-        )
-        resp["status"] = 200
-        return json.dumps(resp)
-        # except:
-        #     return json.dumps({"status": 400})
+        try:
+            tx, signers = mint(api_endpoint, self.keypair, contract_key, dest_key, link, supply=supply,
+                               create_master_edition=create_master_edition)
+            resp = execute(
+                api_endpoint,
+                tx,
+                signers,
+                max_retries=max_retries,
+                skip_confirmation=skip_confirmation,
+                max_timeout=max_timeout,
+                target=target,
+                finalized=finalized,
+            )
+            resp["status"] = 200
+            return json.dumps(resp)
+        except Exception as e:
+            return json.dumps({"status": 400, "error": f"{e}"})
 
     def update_token_metadata(self, api_endpoint, mint_token_id, link, data, creators_addresses, creators_verified,
                               creators_share, fee, max_retries=3, skip_confirmation=False, max_timeout=60, target=20,
                               finalized=True, supply=1):
         """
             Updates the json metadata for a given mint token id.
-            """
-        tx, signers = update_token_metadata(api_endpoint, self.keypair, mint_token_id, link, data, fee,
-                                            creators_addresses, creators_verified, creators_share)
-        resp = execute(
-            api_endpoint,
-            tx,
-            signers,
-            max_retries=max_retries,
-            skip_confirmation=skip_confirmation,
-            max_timeout=max_timeout,
-            target=target,
-            finalized=finalized,
-        )
-        resp["status"] = 200
-        return json.dumps(resp)
+        """
+        try:
+            tx, signers = update_token_metadata(api_endpoint, self.keypair, mint_token_id, link, data, fee,
+                                                creators_addresses, creators_verified, creators_share)
+            resp = execute(
+                api_endpoint,
+                tx,
+                signers,
+                max_retries=max_retries,
+                skip_confirmation=skip_confirmation,
+                max_timeout=max_timeout,
+                target=target,
+                finalized=finalized,
+            )
+            resp["status"] = 200
+            return json.dumps(resp)
+        except Exception as e:
+            return json.dumps({"status": 400, "error": f"{e}"})
 
     def send(self, api_endpoint, contract_key, sender_key, dest_key, encrypted_private_key=None, max_retries=3,
              skip_confirmation=False, max_timeout=60, target=20, finalized=True):
@@ -127,7 +138,6 @@ class MetaplexAPI:
         May require a private key, if so this will be provided encrypted using Fernet: https://cryptography.io/en/latest/fernet/
         Return a status flag of success or fail and the native transaction data. 
         """
-        log.debug("send()")
         try:
             # If encrypting: private_key = list(self.cipher.decrypt(encrypted_private_key))
             private_key = self.private_key

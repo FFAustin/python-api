@@ -136,7 +136,7 @@ def update_token_metadata(api_endpoint, source_account, mint_token_id, link, dat
     return tx, signers
 
 
-def mint(api_endpoint, source_account, contract_key, dest_key, link, supply=1):
+def mint(api_endpoint, source_account, contract_key, dest_key, link, supply=1, create_master_edition=True):
     """
     Mint a token on the specified network and contract, into the wallet specified by address.
     Required parameters: batch, sequence, limit
@@ -202,14 +202,18 @@ def mint(api_endpoint, source_account, contract_key, dest_key, link, supply=1):
         mint_account,
     )
     tx = tx.add(update_metadata_ix)
-    create_master_edition_ix = create_master_edition_instruction(
-        mint=mint_account,
-        update_authority=source_account.public_key,
-        mint_authority=source_account.public_key,
-        payer=source_account.public_key,
-        supply=supply,
-    )
-    tx = tx.add(create_master_edition_ix)
+    # If you choose not to create the master edition, you can mint the token from
+    # the authorizing account as many times as you like. Most Metaplex NFTs are
+    # master editions.
+    if create_master_edition:
+        create_master_edition_ix = create_master_edition_instruction(
+            mint=mint_account,
+            update_authority=source_account.public_key,
+            mint_authority=source_account.public_key,
+            payer=source_account.public_key,
+            supply=supply,
+        )
+        tx = tx.add(create_master_edition_ix)
     return tx, signers
 
 
