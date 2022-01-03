@@ -1,28 +1,29 @@
+import collections
 import time
 import logging
-from solana.keypair import Keypair
 from solana.rpc.api import Client
 from solana.rpc.types import TxOpts
 
 log = logging.getLogger(__name__)
 
 
+def remove_duplicated(items: list[collections.Hashable]) -> list[collections.Hashable]:
+    # removes duplicated items in an iterator while preserving order
+    seen = set()
+    return [x for x in items if not (x in seen or seen.add(x))]
+
+
 def execute(api_endpoint, tx, signers, max_retries=3, skip_confirmation=True, max_timeout=60, target=20,
             finalized=True):
     client = Client(api_endpoint)
-    # signers = list(map(Keypair, set(map(lambda s: s.seed, signers))))
 
-    resulting_signers = []
-    for signer in signers:
-        if signer in resulting_signers:
-            continue
-        resulting_signers.append(signer)
-        log.debug(f"Adding signer: {signer.seed}")
+    # The order of the signers must be preserved, but duplicated signers can be removed
+    signers = remove_duplicated(signers)
 
     last_error = TimeoutError()
     for attempt in range(max_retries):
         try:
-            result = client.send_transaction(tx, *resulting_signers, opts=TxOpts(skip_preflight=False))
+            result = client.send_transaction(tx, *signers, opts=TxOpts(skip_preflight=False))
             log.debug(f"Result of execution: {result}")
             signatures = [x.signature for x in tx.signatures]
             if not skip_confirmation:
